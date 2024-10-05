@@ -1,0 +1,253 @@
+---
+title: "Assignment 1"
+author: "Ella Lee"
+format: html
+editor: visual
+---
+
+## Preprocessing
+
+```{r}
+install.packages("wordcloud")
+install.packages("SnowballC")
+
+library(rtweet)
+library(tm)
+library(wordcloud)
+library(SnowballC)
+
+```
+
+Set 1
+
+```{r}
+set1_data <- read.csv("bshes740/TADA_A1_set1.csv")
+set1_texts <- set1_data$text
+summary(set1_texts)
+
+set1_text_corpus <- Corpus(VectorSource(set1_texts))
+set1_text_corpus <- tm_map(set1_text_corpus, content_transformer(tolower))
+set1_text_corpus <- tm_map(set1_text_corpus, removeNumbers)
+stopwords()
+
+
+set1_text_corpus <- tm_map(set1_text_corpus, stemDocument)
+
+set1_text_corpus[[1]]
+set1_text_corpus[[1]]$content
+set1_text_corpus[[1]]$meta$datetimestamp
+doc_term_matrix <- DocumentTermMatrix(set1_text_corpus)
+doc_term_matrix
+
+```
+
+Set 2
+
+```{r}
+set2_data <- read.csv("bshes740/TADA_A1_set2.csv")
+
+set2_texts <- set2_data$text
+summary(set2_texts)
+
+set2_text_corpus <- Corpus(VectorSource(set2_texts))
+set2_text_corpus <- tm_map(set2_text_corpus, content_transformer(tolower))
+set2_text_corpus <- tm_map(set2_text_corpus, removeNumbers)
+stopwords()
+
+set2_text_corpus <- tm_map(set2_text_corpus, stemDocument)
+
+set2_text_corpus[[1]]
+set2_text_corpus[[1]]$content
+set2_text_corpus[[1]]$meta$datetimestamp
+doc_term_matrix2 <- DocumentTermMatrix(set2_text_corpus)
+doc_term_matrix2
+
+
+```
+
+## 1. date range, language
+
+What are the date ranges for the two sets? What information is provided in the CSV files? What are the languages in which tweets have been posted?
+
+```{r}
+#Date range
+
+date_range_set1 <- range(set1_data$date, na.rm = TRUE)
+print(paste("Set 1 Date Range:", date_range_set1[1], "to", date_range_set1[2]))
+##"Set 1 Date Range: 2019-11-01 to 2020-01-30"
+
+date_range_set2 <- range(set2_data$date, na.rm = TRUE)
+print(paste("Set 2 Date Range:", date_range_set2[1], "to", date_range_set2[2]))
+##"Set 2 Date Range: 2020-02-01 to 2020-04-29"
+
+#information in the CSV file
+colnames(set1_data)
+summary(set1_data)
+colnames(set2_data)
+summary(set2_data)
+##The CSV files provide tweet IDs, dates, languages, tweet content, and location
+
+#language usage
+language_counts <- table(set1_data$lang)
+print(language_counts)
+language_counts2 <- table(set2_data$lang)
+print(language_counts2)
+
+##Set 1: ar, ca, cs, cy, da, de, el, en, es, et, eu, fi, fr, hi, ht, hu, in, is, it, iw, ja, ko, lt, lv, mr, nl, no, pl, pt, ro, sl, sv, th, tl, tr, und, vi, zh
+
+##Set 2: ar, ca, cs, cy, da, de, el, en, es, et, eu, fa, fi, fr, hi, ht, hu, in, is, it, ja, ko, lt, lv, nl, no, pl, pt, ro, ru, sl, sv, th, tl, tr, und, vi, zh
+
+```
+
+## 2. total number
+
+What is the total number of posts in set 1? What is the total in set 2?
+
+```{r}
+total_posts_set1 <- nrow(set1_data)
+print(paste("Total number of posts in Set 1:", total_posts_set1))
+total_posts_set2 <- nrow(set2_data)
+print(paste("Total number of posts in Set 2:", total_posts_set2))
+
+##"Total number of posts in Set 1: 171012"
+##"Total number of posts in Set 2: 226852"
+```
+
+## 3. number of tweets
+
+How many tweets are there for methadone, Suboxone, and fentanyl in total? Tip: sometimes alternative expressions are used for substances (eg., fent for fentanyl).
+
+```{r}
+# Extract the 'text' column from both CSV datasets as vectors
+set1_texts <- set1_data$text
+set2_texts <- set2_data$text
+
+# Methadone
+set1_methadone <- grep("methadone", tolower(set1_texts))
+set2_methadone <- grep("methadone", tolower(set2_texts))
+
+# Suboxone
+set1_suboxone <- grep("suboxone", tolower(set1_texts))
+set2_suboxone <- grep("suboxone", tolower(set2_texts))
+
+
+# Fentanyl and "fent"
+set1_fent <- grep("fentanyl|fent", tolower(set1_texts))
+set2_fent <- grep("fentanyl|fent", tolower(set2_texts))
+
+
+# Calculate totals
+total_methadone <- length(set1_methadone) + length(set2_methadone)
+total_suboxone <- length(set1_suboxone) + length(set2_suboxone)
+total_fentanyl <- length(set1_fent) + length(set2_fent)
+
+#print
+total_methadone
+##21219
+total_suboxone
+##9324
+total_fentanyl
+##353417
+
+
+```
+
+## 4. fentanyl analogs
+
+Are there fentanyl analogs that are also being discussed (eg., carfentanil)?
+
+```{r}
+# Define a vector of fentanyl analogs to search for
+fentanyl_analogs <- c("carfentanil")
+
+# Initialize lists to store results
+set1_analog <- list()
+set2_analog <- list()
+
+# Loop through the analogs and grep for each one
+for (analog in fentanyl_analogs) {
+  set1_analog[[analog]] <- grep(analog, tolower(set1_texts))
+  set2_analog[[analog]] <- grep(analog, tolower(set2_texts))
+}
+
+# Print the results
+for (analog in fentanyl_analogs) {
+  total_set1 <- length(set1_analog[[analog]])
+  total_set2 <- length(set2_analog[[analog]])
+}  
+ total_set1
+ ## 854
+ total_set2
+ ## 430
+ 
+```
+
+## 5. most associated top 5-10
+
+What are some of the topics that are most closely associated with each of the three substances? The top 5-10 topics (if relevant) are acceptable.
+
+```{r}
+#methadone
+methadone_assoc <- findAssocs(doc_term_matrix, "methadone", 0.3)
+methadone_assoc2 <- findAssocs(doc_term_matrix2, "methadone", 0.3) 
+
+#suboxone
+suboxone_assoc <- findAssocs(doc_term_matrix, "suboxone", 0.3)
+suboxone_assoc2 <- findAssocs(doc_term_matrix2, "suboxone", 0.3) 
+
+#fentanyl
+fentanyl_assoc <- findAssocs(doc_term_matrix, "fentanyl", 0.3)
+fentanyl_assoc2 <- findAssocs(doc_term_matrix2, "fentanyl", 0.3) 
+
+
+```
+
+## 6. word clouds
+
+Generate word clouds for each set, so that they can be shown to the researcher.
+
+```{r}
+set1_matrix <- as.matrix(doc_term_matrix)
+set1_words <- sort(rowSums(set1_matrix), decreasing = TRUE)
+set1_word_data <- data.frame(word = names(set1_words), freq = set1_words)
+
+set2_matrix <- as.matrix(doc_term_matrix2)
+set2_words <- sort(rowSums(set2_matrix), decreasing = TRUE)
+set2_word_data <- data.frame(word = names(set2_words), freq = set2_words)
+
+set1_wordcloud <- wordcloud(set1_word_data$word,
+                            set1_word_data$freq, 
+                            min.freq = 3, 
+                            max.words = 100, 
+                            random.order = FALSE, 
+                            rot.per = 0.35, 
+                            scale = c(3, 0.5))
+
+
+set2_wordcloud <- wordcloud(set2_word_data$word,
+                            set2_word_data$freq, 
+                            min.freq = 3, 
+                            max.words = 100, 
+                            random.order = FALSE, 
+                            rot.per = 0.35, 
+                            scale = c(3, 0.5))
+
+#or
+terms_with_high_freq <- findFreqTerms(doc_term_matrix, lowfreq = 15, highfreq = Inf)
+summary(terms_with_high_freq)
+terms_with_high_freq[1:10]
+wordcloud(tweet_text_corpus, min.freq = 10, max.words = 200, scale=c(3,.1), random.order = FALSE, colors = brewer.pal(12, "Set3"))
+
+```
+
+## 7. time series figures
+
+Generate appropriate time-series ﬁgures to compare how the frequencies of mentions of these substances differ.
+
+```{r}
+
+```
+
+## 8. top 10 most frequent bigrams
+
+Find the top 10 most frequent bigrams in each of the three sets. Plot a bar chart for these.
