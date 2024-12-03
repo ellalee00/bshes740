@@ -1,0 +1,356 @@
+---
+title: "Assignment 2"
+author: "Ella Lee"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r}
+install.packages("randomForest")
+install.packages("yardstick")
+
+```
+
+```{r}
+library(dplyr)
+library(caTools)
+library(tm)
+library(mlapi)
+library(e1071)
+library(randomForest)
+```
+
+```{r}
+full_dataset <- read.csv('TADA_Annotated_data_2024.csv')
+head(full_dataset)
+glimpse(full_dataset)
+
+```
+
+
+1. Use the annotated data to design a supervised classiﬁcation experiment. The experiment should involve training and evaluation. The standard supervised classiﬁcation steps must be followed. (4 points) `
+
+
+```{r}
+
+
+# Split data into train and test sets
+set.seed(1234)
+split <- sample.split(full_dataset$class, SplitRatio = 0.8)
+train_data <- full_dataset[split, ]
+test_data <- full_dataset[!split, ]
+
+# Preprocess
+preprocess_text <- function(text) {
+  corp <- Corpus(VectorSource(text))
+  corp <- tm_map(corp, content_transformer(tolower))
+  corp <- tm_map(corp, removePunctuation)
+  corp <- tm_map(corp, removeWords, stopwords("english"))
+  corp <- tm_map(corp, stemDocument)
+  return(corp)
+}
+
+# Preprocess train and test text separately
+train_corp <- preprocess_text(train_data$text)
+test_corp <- preprocess_text(test_data$text)
+
+# Tokenizaton: Create DTM
+train_dtm <- DocumentTermMatrix(train_corp)
+train_dtm_sparse <- removeSparseTerms(train_dtm, 0.99) 
+
+#Vectorization
+train_matrix <- as.data.frame(as.matrix(train_dtm_sparse))
+train_matrix$class <- as.factor(train_data$class)
+
+# Create DTM for test data using train dictionary
+test_dtm <- DocumentTermMatrix(test_corp, control = list(dictionary = Terms(train_dtm_sparse)))
+test_matrix <- as.data.frame(as.matrix(test_dtm))
+test_matrix$class <- as.factor(test_data$class)
+
+# Train a Random Forest model
+colnames(train_matrix) <- make.names(colnames(train_matrix), unique = TRUE)
+
+# Convert class column to factor
+train_matrix$class <- as.factor(train_matrix$class)
+
+# Train the Random Forest model
+rf_model <- randomForest(class ~ ., data = train_matrix, ntree = 100)
+print(rf_model)
+
+#Predictions
+train_predictions <- predict(rf_model, train_matrix)
+
+# Evaluate
+conf_matrix <- table(train_matrix$class, train_predictions)
+accuracy <- sum(diag(conf_matrix)) / sum(conf_matrix)
+
+print(conf_matrix)
+print(paste("Accuracy:", round(accuracy, 2)))
+
+#Implement on the test dataset
+colnames(test_matrix) <- make.names(colnames(test_matrix), unique = TRUE)
+
+test_matrix$class <- as.factor(test_data$class)
+
+# Make predictions
+test_predictions <- predict(rf_model, newdata = test_matrix)
+
+# Evaluate 
+test_conf_matrix <- table(True = test_matrix$class, Predicted = test_predictions)
+
+# Calculate accuracy
+test_accuracy <- sum(diag(test_conf_matrix)) / sum(test_conf_matrix)
+
+
+cat("\n--- Test Data Evaluation ---\n")
+print(test_conf_matrix)
+cat("Test Accuracy:", round(test_accuracy, 2), "\n")
+
+
+
+```
+
+
+
+
+2. Use the same set of tweets for comparing the classiﬁcation performances of at least 3 classiﬁers. Which classiﬁer is the best for classiﬁcation? (5 points) 
+
+```{r}
+
+library(yardstick)
+
+# Ensure train_matrix
+colnames(train_matrix) <- make.names(colnames(train_matrix), unique = TRUE)
+train_matrix$class <- as.factor(train_matrix$class)
+
+# Random Forest
+rf_model <- randomForest(class ~ ., data = train_matrix, ntree = 100)
+rf_predictions <- predict(rf_model, train_matrix)
+
+# SVM with Kernel
+svm_model <- svm(class ~ ., data = train_matrix, kernel = "radial")
+svm_predictions <- predict(svm_model, train_matrix)
+
+# Naive Bayes
+nb_model <- naiveBayes(class ~ ., data = train_matrix)
+nb_predictions <- predict(nb_model, train_matrix)
+
+# Create evaluation data frames for yardstick
+rf_results <- data.frame(truth = train_matrix$class, predicted = rf_predictions)
+svm_results <- data.frame(truth = train_matrix$class, predicted = svm_predictions)
+nb_results <- data.frame(truth = train_matrix$class, predicted = nb_predictions)
+
+colnames(rf_results) <- c("truth", "predicted")
+colnames(svm_results) <- c("truth", "predicted")
+colnames(nb_results) <- c("truth", "predicted")
+
+# Generate confusion matrics
+rf_conf_matrix <- conf_mat(rf_results, truth = truth, estimate = predicted)
+svm_conf_matrix <- conf_mat(svm_results, truth = truth, estimate = predicted)
+nb_conf_matrix <- conf_mat(nb_results, truth = truth, estimate = predicted)
+
+print(rf_conf_matrix)
+print(svm_conf_matrix)
+print(nb_conf_matrix)
+
+# Calculate accuracy 
+rf_accuracy <- accuracy(rf_results, truth = truth, estimate = predicted)
+svm_accuracy <- accuracy(svm_results, truth = truth, estimate = predicted)
+nb_accuracy <- accuracy(nb_results, truth = truth, estimate = predicted)
+
+cat("\n--- Accuracy Comparison ---\n")
+cat("Random Forest Accuracy:", rf_accuracy$.estimate, "\n")
+cat("SVM Accuracy:", svm_accuracy$.estimate, "\n")
+cat("Naive Bayes Accuracy:", nb_accuracy$.estimate, "\n")
+
+
+
+#test
+colnames(test_matrix) <- make.names(colnames(test_matrix), unique = TRUE)
+
+# Random Forest
+rf_predictions_test <- predict(rf_model, test_matrix)
+
+# SVM with Kernel
+svm_predictions_test <- predict(svm_model, test_matrix)
+
+# Naive Bayes
+nb_predictions_test <- predict(nb_model, test_matrix)
+
+# evaluation
+rf_results_test <- data.frame(truth = test_matrix$class, predicted = rf_predictions_test)
+svm_results_test <- data.frame(truth = test_matrix$class, predicted = svm_predictions_test)
+nb_results_test <- data.frame(truth = test_matrix$class, predicted = nb_predictions_test)
+
+rf_conf_matrix_test <- conf_mat(rf_results_test, truth = truth, estimate = predicted)
+svm_conf_matrix_test <- conf_mat(svm_results_test, truth = truth, estimate = predicted)
+nb_conf_matrix_test <- conf_mat(nb_results_test, truth = truth, estimate = predicted)
+
+cat("\n--- Confusion Matrices (Test Data) ---\n")
+print(rf_conf_matrix_test)
+print(svm_conf_matrix_test)
+print(nb_conf_matrix_test)
+
+# accuracy
+rf_accuracy_test <- accuracy(rf_results_test, truth = truth, estimate = predicted)
+svm_accuracy_test <- accuracy(svm_results_test, truth = truth, estimate = predicted)
+nb_accuracy_test <- accuracy(nb_results_test, truth = truth, estimate = predicted)
+
+cat("\n--- Accuracy Comparison on Test Data ---\n")
+cat("Random Forest Accuracy (Test):", rf_accuracy_test$.estimate, "\n")
+cat("SVM Accuracy (Test):", svm_accuracy_test$.estimate, "\n")
+cat("Naive Bayes Accuracy (Test):", nb_accuracy_test$.estimate, "\n")
+
+
+
+```
+
+
+3. Use the best-performing machine learning model to automatically classify all the unlabeled tweets. (5 points) 
+
+
+```{r}
+
+
+unlabeled_data <- read.csv("TADA_unlabeled_data_2024 (2).csv")
+
+# Preprocess
+preprocess_text <- function(text) {
+  corp <- Corpus(VectorSource(text))
+  corp <- tm_map(corp, content_transformer(tolower))
+  corp <- tm_map(corp, removePunctuation)
+  corp <- tm_map(corp, removeWords, stopwords("english"))
+  corp <- tm_map(corp, stemDocument)
+  return(corp)
+}
+
+unlabeled_corp <- preprocess_text(unlabeled_data$text)
+
+# Create a Document-Term Matrix
+unlabeled_dtm <- DocumentTermMatrix(unlabeled_corp, control = list(dictionary = Terms(train_dtm_sparse)))
+
+# Convert the DTM to a data frame
+unlabeled_matrix <- as.data.frame(as.matrix(unlabeled_dtm))
+colnames(unlabeled_matrix) <- make.names(colnames(unlabeled_matrix), unique = TRUE)
+
+# Use the SVM model to classify the unlabeled tweets
+unlabeled_predictions <- predict(svm_model, newdata = unlabeled_matrix)
+
+unlabeled_predictions <- factor(unlabeled_predictions, levels = c(0, 1, 2, 3), labels = c(1, 2, 3, NA))
+
+cat("\n--- Unique Predictions ---\n")
+print(unique(unlabeled_predictions))
+cat("\n--- Prediction Distribution ---\n")
+print(table(unlabeled_predictions))
+
+# Combine the original data with the predicted classes
+classified_unlabeled_data <- cbind(unlabeled_data, predicted_class = unlabeled_predictions)
+
+# Save the results to a CSV file
+write.csv(classified_unlabeled_data, "classified_unlabeled_tweets.csv", row.names = FALSE)
+
+
+# Display the first few rows of the results
+cat("\n--- Preview of Classified Results ---\n")
+print(classified_unlabeled_data)
+
+
+print(head(classified_unlabeled_data))
+
+
+```
+
+
+
+
+
+4.Compare the distribution of nonmedical use reporting tweets between the two locations (eg.., # of reports, proportion of tweets representing nonmedical use, population-adjusted report rate). The total population for city A is 500,000. The total population for city B is 10,000 (3 points). 
+
+
+```{r}
+# Filter nonmedical use tweets
+nonmed <- classified_unlabeled_data[classified_unlabeled_data$predicted_class == 1, ]
+
+# Distribution of 2 locations
+city_A <- subset(nonmed, city == "A")
+city_B <- subset(nonmed, city == "B")
+
+# Number of nonmedical use tweets per city
+tweets_A <- nrow(city_A)
+tweets_B <- nrow(city_B)
+
+tweets_A
+tweets_B
+
+# Total tweets per city
+total_tweets_A <- nrow(classified_unlabeled_data[classified_unlabeled_data$city == "A", ])
+total_tweets_B <- nrow(classified_unlabeled_data[classified_unlabeled_data$city == "B", ])
+
+total_tweets_A
+total_tweets_B
+
+
+# Proportion of nonmedical use tweets
+proportion_A <- tweets_A / total_tweets_A
+proportion_B <- tweets_B / total_tweets_B
+
+# Population-adjusted report rates
+popad_A <- 500000
+popad_B <- 10000
+
+adjusted_A <- (tweets_A / popad_A) * 100000
+adjusted_B <- (tweets_B / popad_B) * 100000
+
+# Print results
+cat("\n--- Nonmedical Use Reporting Comparison ---\n")
+cat("City A Reports:", tweets_A, "\n")
+cat("City B Reports:", tweets_B, "\n")
+cat("City A Proportion:", round(proportion_A, 4), "\n")
+cat("City B Proportion:", round(proportion_B, 4), "\n")
+cat("City A Adjusted Rate:", round(adjusted_A, 2), "\n")
+cat("City B Adjusted Rate:", round(adjusted_B, 2), "\n")
+```
++) Most mentioned Substances
+
+```{r}
+# List of substances to track (you can expand this list as needed)
+substance_list <- c("opioid", "stimulant", "benzodiazepine", "fentanyl", "methamphetamine", "adderall", "xanax", "heroin")
+
+# Preprocess and tokenize text for nonmedical use tweets
+library(stringr)
+
+# Extract the text from nonmedical use tweets
+nonmed_text <- tolower(nonmed$text)  # Convert to lowercase for case-insensitive matching
+
+# Count mentions of each substance
+substance_counts <- sapply(substance_list, function(substance) {
+  sum(str_detect(nonmed_text, paste0("\\b", substance, "\\b")), na.rm = TRUE)
+})
+
+# Create a data frame to store results
+substance_counts_df <- data.frame(
+  substance = substance_list,
+  count = substance_counts
+)
+
+# Sort by count in descending order
+substance_counts_df <- substance_counts_df[order(-substance_counts_df$count), ]
+
+# Print the most mentioned substance
+cat("\n--- Most Mentioned Nonmedical Use Substance ---\n")
+print(substance_counts_df)
+
+# Most mentioned substance
+most_mentioned <- substance_counts_df[1, ]
+cat("\nThe most mentioned substance is:", most_mentioned$substance, "with", most_mentioned$count, "mentions.\n")
+
+```
+
+
+
+
+
+
+
+
+
